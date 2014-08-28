@@ -54,14 +54,11 @@ func (s *Server) CloseSocket() error {
 }
 
 func (s *Server) Run() error {
-	var signalIn os.Signal
-	var endSignal chan os.Signal
-	endSignal = make(chan os.Signal)
+	endSignal := make(chan os.Signal)
 	signal.Notify(endSignal, syscall.SIGINT, syscall.SIGQUIT)
 	for {
 		select {
-		case signalIn = <-endSignal:
-			println(signalIn.String())
+		case <-endSignal:
 			s.Shutdown()
 			return nil
 		}

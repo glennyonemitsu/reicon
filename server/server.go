@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/gob"
 	"net"
 	"os"
 	"os/signal"
@@ -14,6 +15,10 @@ func (s *Server) Bootstrap(basepath string) error {
 	s.basepath = basepath
 	s.modpath = path.Join(basepath, "modules")
 	s.socketpath = path.Join(basepath, "server.sock")
+
+	s.signalChan = make(chan os.Signal)
+	signal.Notify(s.signalChan, syscall.SIGINT, syscall.SIGQUIT)
+
 	err = s.FindModules()
 	if err != nil {
 		return err
@@ -35,9 +40,7 @@ func (s *Server) FindModules() error {
 }
 
 func (s *Server) OpenSocket() error {
-	s.SocketAddress = new(net.UnixAddr)
-	s.SocketAddress.Name = s.socketpath
-	s.SocketAddress.Net = "unix"
+	s.SocketAddress = GetUnixAddress(s.basepath)
 	socket, err := net.ListenUnix("unix", s.SocketAddress)
 	if err != nil {
 		return err
@@ -54,19 +57,37 @@ func (s *Server) CloseSocket() error {
 }
 
 func (s *Server) Run() error {
-	endSignal := make(chan os.Signal)
-	signal.Notify(endSignal, syscall.SIGINT, syscall.SIGQUIT)
-	for {
-		select {
-		case <-endSignal:
-			s.Shutdown()
-			return nil
-		}
-	}
+	go s.ListenSignal()
+	s.ListenUnixConnection()
 	return nil
+}
+
+func (s *Server) handleUnixConn(conn *net.UnixConn) {
+	var args []string
+	dec := gob.NewDecoder(conn)
+	dec.Decode(&args)
+
+	for _, a := range args {
+		println(a)
+	}
+	conn.Close()
+}
+
+func (s *Server) ListenUnixConnection() {
+	for {
+		conn, err := s.Socket.AcceptUnix()
+		if err != nil {
+			continue
+		}
+		go s.handleUnixConn(conn)
+	}
+}
+func (s *Server) ListenSignal() {
+	<-s.signalChan
+	s.Shutdown()
 }
 
 func (s *Server) Shutdown() {
 	s.CloseSocket()
-	println("closing")
+	os.Exit(0)
 }

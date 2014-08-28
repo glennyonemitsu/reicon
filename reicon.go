@@ -9,6 +9,7 @@ import (
 )
 
 func main() {
+	var args []string
 	pwd, err := os.Getwd()
 	if err != nil {
 		fmt.Println("cannot get pwd")
@@ -27,8 +28,12 @@ func main() {
 			os.Exit(1)
 			return
 		}
+		if len(os.Args) > 1 {
+			args = os.Args[1:]
+		}
+
 		enc := gob.NewEncoder(conn)
-		enc.Encode(os.Args)
+		enc.Encode(args)
 
 	}
 

@@ -17,7 +17,7 @@ func (s *Server) Bootstrap(basepath string) error {
 	s.socketpath = path.Join(basepath, "server.sock")
 
 	s.signalChan = make(chan os.Signal)
-	signal.Notify(s.signalChan, syscall.SIGINT, syscall.SIGQUIT)
+	signal.Notify(s.signalChan)
 
 	err = s.FindModules()
 	if err != nil {
@@ -83,8 +83,16 @@ func (s *Server) ListenUnixConnection() {
 	}
 }
 func (s *Server) ListenSignal() {
-	<-s.signalChan
-	s.Shutdown()
+	var si os.Signal
+	for {
+		si = <-s.signalChan
+		switch si {
+		case syscall.SIGINT:
+			fallthrough
+		case syscall.SIGQUIT:
+			s.Shutdown()
+		}
+	}
 }
 
 func (s *Server) Shutdown() {

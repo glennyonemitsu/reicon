@@ -56,10 +56,9 @@ func (s *Server) CloseSocket() error {
 	return nil
 }
 
-func (s *Server) Run() error {
+func (s *Server) Run() {
 	go s.ListenSignal()
 	s.ListenUnixConnection()
-	return nil
 }
 
 func (s *Server) handleUnixConn(conn *net.UnixConn) {

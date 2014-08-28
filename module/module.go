@@ -1,9 +1,7 @@
 package module
 
 type Module struct {
-	Name        string
-	Initialize  func()
-	IsInstalled func() bool
+	Name string
 }
 
 func (m *Module) Run() {

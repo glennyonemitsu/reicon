@@ -12,6 +12,11 @@ type Server struct {
 	signalChan    chan os.Signal
 	connChan      chan *net.UnixConn
 	Modules       []string
-	Socket        *net.UnixListener
+	ModuleProcs   []*ModuleProc
+	SocketListen  *net.UnixListener
 	SocketAddress *net.UnixAddr
+}
+
+type ModuleProc struct {
+	Process *os.Process
 }

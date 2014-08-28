@@ -2,6 +2,8 @@ package server
 
 import (
 	"encoding/gob"
+	"fmt"
+	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -19,39 +21,99 @@ func (s *Server) Bootstrap(basepath string) error {
 	s.signalChan = make(chan os.Signal)
 	signal.Notify(s.signalChan)
 
-	err = s.FindModules()
-	if err != nil {
-		return err
-	}
 	err = s.OpenSocket()
 	if err != nil {
 		return err
 	}
+
+	err = s.FindModules()
+	if err != nil {
+		return err
+	}
+
+	err = s.LoadModules()
+	if err != nil {
+		return err
+	}
+	go s.PingModules()
+
 	return nil
 }
 
+func (s *Server) PingModules() {
+	log.Println("pinging")
+
+	conn, err := net.DialUnix("unix", nil, s.SocketAddress)
+	if err != nil {
+		log.Fatalf("Error when dialing for ping: %s\n", err.Error())
+	}
+
+	enc := gob.NewEncoder(conn)
+	err = enc.Encode(string("ping"))
+	if err != nil {
+		log.Fatalf("could not encode %s\n", err.Error())
+	}
+
+	var reply string
+	dec := gob.NewDecoder(conn)
+	err = dec.Decode(&reply)
+	if err != nil {
+		log.Fatalf("could not decode %s\n", err.Error())
+	}
+	log.Println(reply)
+}
+
 func (s *Server) FindModules() error {
+	log.Println("finding modules")
 	var err error
 	s.Modules, err = filepath.Glob(path.Join(s.modpath, "*"))
 	if err != nil {
 		return err
 	}
+	log.Println("found modules")
+	return nil
+}
+
+func (s *Server) LoadModules() error {
+	log.Println("loading modules")
+	var proc *ModuleProc
+	var attr *os.ProcAttr
+	var err error
+	for _, m := range s.Modules {
+		proc = new(ModuleProc)
+		attr = new(os.ProcAttr)
+		attr.Dir = m
+		attr.Env = append(
+			attr.Env,
+			fmt.Sprintf("REICON_SYSTEM_SOCKET=%s", s.socketpath),
+		)
+		proc.Process, err = os.StartProcess(
+			fmt.Sprintf("%s/mod_%s", m, path.Base(m)),
+			[]string{},
+			attr,
+		)
+		if err != nil {
+			return err
+		}
+		s.ModuleProcs = append(s.ModuleProcs, proc)
+	}
+	log.Println("loaded modules")
 	return nil
 }
 
 func (s *Server) OpenSocket() error {
 	s.SocketAddress = GetUnixAddress(s.basepath)
-	socket, err := net.ListenUnix("unix", s.SocketAddress)
+	listen, err := net.ListenUnix("unix", s.SocketAddress)
 	if err != nil {
 		return err
 	}
-	s.Socket = socket
+	s.SocketListen = listen
 	return nil
 }
 
 func (s *Server) CloseSocket() error {
-	if s.Socket != nil {
-		return s.Socket.Close()
+	if s.SocketListen != nil {
+		return s.SocketListen.Close()
 	}
 	return nil
 }
@@ -67,14 +129,14 @@ func (s *Server) handleUnixConn(conn *net.UnixConn) {
 	dec.Decode(&args)
 
 	for _, a := range args {
-		println(a)
+		log.Println(a)
 	}
 	conn.Close()
 }
 
 func (s *Server) ListenUnixConnection() {
 	for {
-		conn, err := s.Socket.AcceptUnix()
+		conn, err := s.SocketListen.AcceptUnix()
 		if err != nil {
 			continue
 		}
